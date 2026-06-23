@@ -19,11 +19,13 @@ from src.config import (
     MODEL_SAVE_PATH,
     FASTTEXT_MODEL_PATH,
     FEATURE_COLUMNS,
+    USE_FEATURE_FUSION,
+    NUM_EXTRA_FEATURES,
 )
 from src.utils import set_seed, load_and_split_data, create_dataloaders, build_feature_tensor, load_fasttext_model
 from src.data.dataset import KhmerTextDataset
-from src.models.gru import GRUClassifier
-from src.models.train_utils import train_gru_epoch, evaluate_gru, EarlyStopping
+from src.models.gru import ImprovedGRUClassifier
+from src.models.train_utils import train_gru_epoch_with_features, evaluate_gru_with_features, EarlyStopping
 
 
 def main():
@@ -63,23 +65,31 @@ def main():
         train_dataset, val_dataset, test_dataset, BATCH_SIZE
     )
 
-    print("\nInitializing GRU model...")
-    gru_model = GRUClassifier(EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT).to(DEVICE)
+    print("\nInitializing Improved GRU model with feature fusion...")
+    gru_model = ImprovedGRUClassifier(
+        EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT,
+        num_extra_features=NUM_EXTRA_FEATURES, use_feature_fusion=USE_FEATURE_FUSION,
+    ).to(DEVICE)
     optimizer = optim.Adam(gru_model.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
     criterion = nn.CrossEntropyLoss()
 
     print("=" * 80)
-    print("Training GRU Model")
+    print("Training Improved GRU Model (with feature fusion)")
     print("=" * 80)
     print(f"Embedding Dim: {EMBEDDING_DIM}")
     print(f"Hidden Dim: {HIDDEN_DIM}")
     print(f"Num Layers: {N_LAYERS}")
     print(f"Dropout: {DROPOUT}")
+    print(f"Feature Fusion: {USE_FEATURE_FUSION}")
+    print(f"Num Extra Features: {NUM_EXTRA_FEATURES}")
     print(f"Learning Rate: {LEARNING_RATE}")
     print(f"Batch Size: {BATCH_SIZE}")
     print(f"Epochs: {N_EPOCHS}")
     print(f"Early Stopping Patience: {PATIENCE}")
     print("=" * 80)
+
+    train_feat_tensor = torch.FloatTensor(X_train_scaled)
+    val_feat_tensor = torch.FloatTensor(X_val_scaled)
 
     train_losses, train_accs = [], []
     val_losses, val_accs = [], []
@@ -90,10 +100,12 @@ def main():
     for epoch in range(N_EPOCHS):
         print(f"\nEpoch {epoch + 1}/{N_EPOCHS}")
         print("-" * 80)
-        train_loss, train_acc = train_gru_epoch(
-            gru_model, train_loader, optimizer, criterion, DEVICE, CLIP_VALUE
+        train_loss, train_acc = train_gru_epoch_with_features(
+            gru_model, train_loader, train_feat_tensor, optimizer, criterion, DEVICE, CLIP_VALUE
         )
-        val_loss, val_acc, _, _ = evaluate_gru(gru_model, val_loader, criterion, DEVICE)
+        val_loss, val_acc, _, _ = evaluate_gru_with_features(
+            gru_model, val_loader, val_feat_tensor, criterion, DEVICE
+        )
         train_losses.append(train_loss)
         train_accs.append(train_acc)
         val_losses.append(val_loss)

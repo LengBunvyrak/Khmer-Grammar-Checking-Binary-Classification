@@ -12,8 +12,10 @@ from src.config import (
     DEVICE,
     FASTTEXT_MODEL_PATH,
     MODEL_SAVE_PATH,
+    USE_FEATURE_FUSION,
+    NUM_EXTRA_FEATURES,
 )
-from src.models.gru import GRUClassifier
+from src.models.gru import ImprovedGRUClassifier
 from src.pipeline.feature_pipeline import FeaturePipeline
 from src.models.predictor import SentencePredictor
 
@@ -41,7 +43,10 @@ def main():
     if scaler is None:
         print("Warning: No scaler found in checkpoint.")
 
-    gru_model = GRUClassifier(EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT).to(DEVICE)
+    gru_model = ImprovedGRUClassifier(
+        EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT,
+        num_extra_features=NUM_EXTRA_FEATURES, use_feature_fusion=USE_FEATURE_FUSION,
+    ).to(DEVICE)
     gru_model.load_state_dict(checkpoint["model_state_dict"])
     gru_model.eval()
 

@@ -30,3 +30,6 @@ FEATURE_COLUMNS = [
     "semantic_coherence",
     "grammar_oov_interaction",
 ]
+
+USE_FEATURE_FUSION = True
+NUM_EXTRA_FEATURES = len(FEATURE_COLUMNS)

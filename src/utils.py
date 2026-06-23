@@ -1,4 +1,5 @@
 import os
+import ast
 import numpy as np
 import torch
 import pandas as pd
@@ -31,6 +32,10 @@ def load_and_split_data(df_path="train_data.csv", feature_columns=None):
     if feature_columns is None:
         feature_columns = FEATURE_COLUMNS
     df = pd.read_csv(df_path, encoding="utf-8-sig")
+    if "tokens" in df.columns:
+        df["tokens"] = df["tokens"].apply(ast.literal_eval)
+    if "pos_tags" in df.columns:
+        df["pos_tags"] = df["pos_tags"].apply(ast.literal_eval)
     available_features = [col for col in feature_columns if col in df.columns]
     X = df[available_features]
     y = df["sentence_correct"]

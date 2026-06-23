@@ -24,11 +24,14 @@ from src.config import (
     DATA_PATH,
     MODEL_SAVE_PATH,
     FEATURE_COLUMNS,
+    USE_FEATURE_FUSION,
+    NUM_EXTRA_FEATURES,
 )
-from src.utils import load_and_split_data, create_dataloaders
+from src.utils import load_and_split_data, create_dataloaders, build_feature_tensor
 from src.data.dataset import KhmerTextDataset
-from src.models.gru import GRUClassifier
-from src.models.train_utils import evaluate_gru
+from src.models.gru import ImprovedGRUClassifier
+from src.models.train_utils import evaluate_gru_with_features
+import torch
 import fasttext
 
 
@@ -52,19 +55,25 @@ def main():
     _, _, test_loader = create_dataloaders(None, None, test_dataset, BATCH_SIZE)
 
     print("\nLoading saved model...")
-    checkpoint = torch.load(MODEL_SAVE_PATH, map_location=DEVICE, weights_only=True)
+    checkpoint = torch.load(MODEL_SAVE_PATH, map_location=DEVICE, weights_only=False)
     model_state = checkpoint["model_state_dict"]
+    scaler = checkpoint.get("scaler", None)
 
-    gru_model = GRUClassifier(EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT).to(DEVICE)
+    gru_model = ImprovedGRUClassifier(
+        EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT,
+        num_extra_features=NUM_EXTRA_FEATURES, use_feature_fusion=USE_FEATURE_FUSION,
+    ).to(DEVICE)
     gru_model.load_state_dict(model_state)
     criterion = nn.CrossEntropyLoss()
 
+    test_feat_tensor = build_feature_tensor(df, X_test.index, FEATURE_COLUMNS, scaler)
+
     print("=" * 80)
-    print("Evaluating GRU on Test Set")
+    print("Evaluating Improved GRU on Test Set (with feature fusion)")
     print("=" * 80)
 
-    test_loss, test_acc, y_pred, y_true = evaluate_gru(
-        gru_model, test_loader, criterion, DEVICE
+    test_loss, test_acc, y_pred, y_true = evaluate_gru_with_features(
+        gru_model, test_loader, test_feat_tensor, criterion, DEVICE
     )
 
     test_precision = precision_score(y_true, y_pred)
