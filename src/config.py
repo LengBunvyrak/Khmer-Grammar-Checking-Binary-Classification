@@ -16,7 +16,12 @@ BATCH_SIZE = 32
 PATIENCE = 3
 CLIP_VALUE = 1.0
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    DEVICE = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    DEVICE = torch.device("mps")
+else:
+    DEVICE = torch.device("cpu")
 
 FEATURE_COLUMNS = [
     "oov_ratio",

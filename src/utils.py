@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch
 import pandas as pd
@@ -7,6 +8,23 @@ from torch.utils.data import DataLoader
 
 from src.config import FEATURE_COLUMNS, BATCH_SIZE, DEVICE
 from src.data.dataset import KhmerTextDataset, collate_batch
+
+
+def load_fasttext_model(model_path):
+    if not os.path.exists(model_path):
+        print(f"FastText model not found at {model_path}, downloading...")
+        import fasttext.util
+        fasttext.util.download_model('km', if_exists='ignore')
+        downloaded_path = f"cc.km.300.bin"
+        if os.path.exists(downloaded_path):
+            model_path = downloaded_path
+        else:
+            raise FileNotFoundError(
+                f"Downloaded model not found at {downloaded_path}. "
+                f"Please download cc.km.300.bin manually from https://fasttext.cc/docs/en/crawl-vectors.html"
+            )
+    import fasttext
+    return fasttext.load_model(model_path)
 
 
 def load_and_split_data(df_path="train_data.csv", feature_columns=None):

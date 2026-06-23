@@ -20,11 +20,10 @@ from src.config import (
     FASTTEXT_MODEL_PATH,
     FEATURE_COLUMNS,
 )
-from src.utils import set_seed, load_and_split_data, create_dataloaders, build_feature_tensor
+from src.utils import set_seed, load_and_split_data, create_dataloaders, build_feature_tensor, load_fasttext_model
 from src.data.dataset import KhmerTextDataset
 from src.models.gru import GRUClassifier
 from src.models.train_utils import train_gru_epoch, evaluate_gru, EarlyStopping
-import fasttext
 
 
 def main():
@@ -32,7 +31,7 @@ def main():
     print(f"Using device: {DEVICE}")
 
     print("Loading FastText embedding model...")
-    embedding_model = fasttext.load_model(FASTTEXT_MODEL_PATH)
+    embedding_model = load_fasttext_model(FASTTEXT_MODEL_PATH)
 
     print("\nLoading and splitting data...")
     df, X_train, X_val, X_test, y_train, y_val, y_test, scaler, _, _, _ = load_and_split_data(

@@ -2,7 +2,6 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 
-import fasttext
 import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -17,6 +16,7 @@ from src.config import (
     FASTTEXT_MODEL_PATH,
     MODEL_SAVE_PATH,
 )
+from src.utils import load_fasttext_model
 from src.models.gru import GRUClassifier
 from src.pipeline.feature_pipeline import FeaturePipeline
 from src.models.predictor import SentencePredictor
@@ -51,7 +51,7 @@ predictor: SentencePredictor | None = None
 async def lifespan(app: FastAPI):
     global predictor
     logger.info("Loading FastText model...")
-    embedding_model = fasttext.load_model(FASTTEXT_MODEL_PATH)
+    embedding_model = load_fasttext_model(FASTTEXT_MODEL_PATH)
 
     logger.info("Loading saved model checkpoint...")
     checkpoint = torch.load(MODEL_SAVE_PATH, map_location=DEVICE, weights_only=False)

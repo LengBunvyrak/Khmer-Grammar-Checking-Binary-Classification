@@ -1,5 +1,5 @@
 import pandas as pd
-import fasttext
+from src.utils import load_fasttext_model
 from src.data.pos_tagger import KhmerPOSTagger
 from src.features.oov import EmbeddingOOVCalculator
 from src.features.grammar import SimplePOSGrammarExtractor
@@ -12,7 +12,7 @@ class FeaturePipeline:
         if embedding_model is not None:
             self.embedding_model = embedding_model
         elif embedding_model_path:
-            self.embedding_model = fasttext.load_model(embedding_model_path)
+            self.embedding_model = load_fasttext_model(embedding_model_path)
         else:
             raise ValueError("Provide embedding_model or embedding_model_path")
         self.lazy_pos = lazy_pos
