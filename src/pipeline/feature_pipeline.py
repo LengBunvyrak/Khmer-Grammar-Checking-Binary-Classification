@@ -3,8 +3,7 @@ from src.utils import load_fasttext_model
 from src.data.pos_tagger import KhmerPOSTagger
 from src.features.oov import EmbeddingOOVCalculator
 from src.features.grammar import SimplePOSGrammarExtractor
-from src.features.semantic import SemanticCoherence
-from src.features.interaction import InteractionFeatureExtractor
+from src.features.structural import StructuralFeatureExtractor
 
 
 class FeaturePipeline:
@@ -19,8 +18,7 @@ class FeaturePipeline:
         self.pos_tagger = None if lazy_pos else KhmerPOSTagger()
         self.oov_extractor = EmbeddingOOVCalculator(self.embedding_model)
         self.grammar_extractor = SimplePOSGrammarExtractor()
-        self.semantic_extractor = SemanticCoherence(self.embedding_model)
-        self.interaction_extractor = InteractionFeatureExtractor()
+        self.structural_extractor = StructuralFeatureExtractor()
 
     def _ensure_pos_tagger(self):
         if self.pos_tagger is None:
@@ -33,14 +31,7 @@ class FeaturePipeline:
         df = self.pos_tagger.tag_dataframe(df)
         df = self.oov_extractor.add_oov_features(df)
         df = self.grammar_extractor.extract_features(df)
-        df = self.semantic_extractor.extract_features(df)
-        df["grammar_oov_interaction"] = df.apply(
-            lambda row: self.interaction_extractor.calculate_grammar_oov_interaction(
-                row.get("dep_grammar_score", 1.0), row["oov_ratio"]
-            ),
-            axis=1,
-        )
-        print("Interaction features extracted")
+        df = self.structural_extractor.extract_features(df)
         return df
 
     def create_temp_dataset(self, tokens):
@@ -53,7 +44,7 @@ class FeaturePipeline:
         return [
             "oov_ratio",
             "dep_grammar_score",
-            "has_complete_clause",
-            "semantic_coherence",
-            "grammar_oov_interaction",
+            "sentence_length",
+            "pos_diversity",
+            "avg_word_length",
         ]

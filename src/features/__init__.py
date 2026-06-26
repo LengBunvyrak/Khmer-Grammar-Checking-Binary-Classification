@@ -1,11 +1,9 @@
 from .oov import EmbeddingOOVCalculator
 from .grammar import SimplePOSGrammarExtractor
-from .interaction import InteractionFeatureExtractor
-from .semantic import SemanticCoherence
+from .structural import StructuralFeatureExtractor
 
 __all__ = [
     "EmbeddingOOVCalculator",
     "SimplePOSGrammarExtractor",
-    "InteractionFeatureExtractor",
-    "SemanticCoherence",
+    "StructuralFeatureExtractor",
 ]

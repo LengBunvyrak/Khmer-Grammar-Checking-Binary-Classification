@@ -26,9 +26,9 @@ else:
 FEATURE_COLUMNS = [
     "oov_ratio",
     "dep_grammar_score",
-    "has_complete_clause",
-    "semantic_coherence",
-    "grammar_oov_interaction",
+    "sentence_length",
+    "pos_diversity",
+    "avg_word_length",
 ]
 
 USE_FEATURE_FUSION = True
