@@ -2,6 +2,8 @@
 
 ITM 454 - Natural Language Processing course project. A Khmer Grammar Checking System formulated as a binary sentence-level classification problem: given a Khmer sentence, the model predicts whether it is grammatically **acceptable (Right)** or **unacceptable (Wrong)**.
 
+> **Latest improvements** are documented in [CHANGES.md](CHANGES.md). Key points: per-token POS embeddings in the BiGRU, weighted loss + tuned decision threshold, a Khmer-transformer path (`train_transformer.py`), a data-generation script with an error taxonomy (`scripts/generate_errors.py`), and the fix for a dataset "space" leak that let the old model cheat (100% of Wrong rows contained a space vs 49.9% of Right rows).
+
 The system follows a standard supervised NLP pipeline adapted for low-resource language settings. Text is tokenized and POS-tagged with [khmer-pos-roberta](https://huggingface.co/seanghay/khmer-pos-roberta). Features are manually engineered from the POS tags and FastText embeddings, then fed into a **BiGRU classifier** with attention pooling and feature fusion.
 
 ## Pipeline Architecture
@@ -102,11 +104,15 @@ src/
     ├── __init__.py
     └── feature_pipeline.py # FeaturePipeline orchestrator
 train.py                    # Full training script
+train_transformer.py        # Khmer-transformer fine-tuning (alternative path)
 evaluate.py                 # Evaluation on test set
 predict.py                  # Single-sentence prediction
 main.py                     # FastAPI web server
+scripts/
+└── generate_errors.py      # Build a labeled dataset with an error taxonomy
 requirements.txt
 train_data.csv              # Pre-extracted feature CSV (20,106 sentences, balanced)
+CHANGES.md                  # Change log for the improvement pass
 README.md
 ```
 
@@ -131,13 +137,20 @@ README.md
 ## Model
 
 **BiGRU with Attention Pooling + Feature Fusion**
-- 300-dim FastText embeddings (cc.km.300.bin)
+- 300-dim FastText embeddings (cc.km.300.bin) + 32-dim per-token POS embeddings
 - 2-layer bidirectional GRU (hidden dim 256)
 - Attention + mean pooling concatenated (1024-dim)
 - Feature fusion: 5 scalar features concatenated to pooled representation
 - 3-layer MLP classifier with LayerNorm and dropout (0.5)
-- Early stopping (patience 3) and gradient clipping (1.0)
-- Adam optimizer (lr=1e-3, weight decay=1e-5)
+- Weighted cross-entropy (`CLASS_WEIGHTS=[1.3, 1.0]`), early stopping (patience 3),
+  gradient clipping (1.0), Adam optimizer (lr=1e-3, weight decay=1e-5)
+- Tuned decision threshold (max F1 on validation), saved in the checkpoint and
+  applied at inference
+
+**Alternative: Khmer Transformer** (`train_transformer.py`)
+- Fine-tunes `seanghay/xlm-roberta-khmer-small` (Khmer-trained RoBERTa, 49.7M
+  params) directly on raw text — no FastText, no manual features.
+- Highest expected accuracy ceiling for this low-resource task.
 
 ### Results (Test Set — old feature set)
 
@@ -158,6 +171,12 @@ pip install -r requirements.txt
 
 # Train
 python train.py
+
+# Fine-tune the Khmer transformer instead (no feature pipeline needed)
+python train_transformer.py
+
+# Generate a new labeled dataset from a raw Khmer corpus (error taxonomy)
+python scripts/generate_errors.py corpus.txt -o data_augmented.csv
 
 # Evaluate
 python evaluate.py

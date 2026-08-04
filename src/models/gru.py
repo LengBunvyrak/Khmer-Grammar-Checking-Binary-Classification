@@ -58,12 +58,18 @@ class ImprovedGRUClassifier(nn.Module):
         dropout=0.5,
         num_extra_features=0,
         use_feature_fusion=False,
+        pos_vocab_size=0,
+        pos_embedding_dim=0,
     ):
         super(ImprovedGRUClassifier, self).__init__()
         self.use_feature_fusion = use_feature_fusion
         self.num_extra_features = num_extra_features
+        self.use_pos = pos_vocab_size > 0 and pos_embedding_dim > 0
+        self.pos_embedding = (
+            nn.Embedding(pos_vocab_size, pos_embedding_dim) if self.use_pos else None
+        )
         self.gru = nn.GRU(
-            embedding_dim,
+            embedding_dim + (pos_embedding_dim if self.use_pos else 0),
             hidden_dim,
             num_layers=n_layers,
             batch_first=True,
@@ -89,7 +95,10 @@ class ImprovedGRUClassifier(nn.Module):
         )
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, embedded_text, text_lengths, extra_features=None):
+    def forward(self, embedded_text, text_lengths, extra_features=None, pos_ids=None):
+        if self.use_pos:
+            pos_emb = self.pos_embedding(pos_ids)
+            embedded_text = torch.cat([embedded_text, pos_emb], dim=-1)
         packed_embedded = nn.utils.rnn.pack_padded_sequence(
             embedded_text, text_lengths.cpu(), batch_first=True, enforce_sorted=False
         )

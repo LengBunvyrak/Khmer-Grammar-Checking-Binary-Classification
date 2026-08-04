@@ -21,11 +21,20 @@ from src.config import (
     FEATURE_COLUMNS,
     USE_FEATURE_FUSION,
     NUM_EXTRA_FEATURES,
+    CLASS_WEIGHTS,
+    POS_TAGS,
+    POS_EMBEDDING_DIM,
 )
 from src.utils import set_seed, load_and_split_data, create_dataloaders, build_feature_tensor, load_fasttext_model
 from src.data.dataset import KhmerTextDataset
 from src.models.gru import ImprovedGRUClassifier
-from src.models.train_utils import train_gru_epoch_with_features, evaluate_gru_with_features, EarlyStopping
+from src.models.train_utils import (
+    train_gru_epoch_with_features,
+    evaluate_gru_with_features,
+    predict_probs_with_features,
+    find_best_threshold,
+    EarlyStopping,
+)
 
 
 def main():
@@ -36,23 +45,26 @@ def main():
     embedding_model = load_fasttext_model(FASTTEXT_MODEL_PATH)
 
     print("\nLoading and splitting data...")
-    df, X_train, X_val, X_test, y_train, y_val, y_test, scaler, _, _, _ = load_and_split_data(
+    df, X_train, X_val, X_test, y_train, y_val, y_test, scaler, X_train_scaled, X_val_scaled, X_test_scaled = load_and_split_data(
         DATA_PATH, FEATURE_COLUMNS
     )
 
     print("\nCreating datasets...")
     train_dataset = KhmerTextDataset(
         df.loc[X_train.index, "tokens"].tolist() if "tokens" in df.columns else df.loc[X_train.index, "text"].tolist(),
+        df.loc[X_train.index, "pos_tags"].tolist() if "pos_tags" in df.columns else [[] for _ in range(len(X_train))],
         y_train.values,
         embedding_model,
     )
     val_dataset = KhmerTextDataset(
         df.loc[X_val.index, "tokens"].tolist() if "tokens" in df.columns else df.loc[X_val.index, "text"].tolist(),
+        df.loc[X_val.index, "pos_tags"].tolist() if "pos_tags" in df.columns else [[] for _ in range(len(X_val))],
         y_val.values,
         embedding_model,
     )
     test_dataset = KhmerTextDataset(
         df.loc[X_test.index, "tokens"].tolist() if "tokens" in df.columns else df.loc[X_test.index, "text"].tolist(),
+        df.loc[X_test.index, "pos_tags"].tolist() if "pos_tags" in df.columns else [[] for _ in range(len(X_test))],
         y_test.values,
         embedding_model,
     )
@@ -69,9 +81,12 @@ def main():
     gru_model = ImprovedGRUClassifier(
         EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT,
         num_extra_features=NUM_EXTRA_FEATURES, use_feature_fusion=USE_FEATURE_FUSION,
+        pos_vocab_size=len(POS_TAGS), pos_embedding_dim=POS_EMBEDDING_DIM,
     ).to(DEVICE)
     optimizer = optim.Adam(gru_model.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(
+        weight=torch.FloatTensor(CLASS_WEIGHTS).to(DEVICE)
+    )
 
     print("=" * 80)
     print("Training Improved GRU Model (with feature fusion)")
@@ -136,15 +151,27 @@ def main():
         best_model_state = early_stopper.best_state_dict
     if best_model_state is not None:
         gru_model.load_state_dict(best_model_state)
+        val_probs, _ = predict_probs_with_features(gru_model, val_loader, val_feat_tensor, DEVICE)
+        threshold = find_best_threshold(val_probs, y_val.values)
         torch.save(
-            {"model_state_dict": best_model_state, "scaler": scaler, "feature_columns": FEATURE_COLUMNS},
+            {
+                "model_state_dict": best_model_state,
+                "scaler": scaler,
+                "feature_columns": FEATURE_COLUMNS,
+                "threshold": threshold,
+            },
             MODEL_SAVE_PATH,
         )
-        print(f"Best model saved to {MODEL_SAVE_PATH}")
+        print(f"Best decision threshold (P(Right) >= {threshold:.3f}) saved to {MODEL_SAVE_PATH}")
     else:
         print("Warning: No best model state captured; using final epoch weights.")
         torch.save(
-            {"model_state_dict": gru_model.state_dict(), "scaler": scaler, "feature_columns": FEATURE_COLUMNS},
+            {
+                "model_state_dict": gru_model.state_dict(),
+                "scaler": scaler,
+                "feature_columns": FEATURE_COLUMNS,
+                "threshold": 0.5,
+            },
             MODEL_SAVE_PATH,
         )
 

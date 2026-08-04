@@ -15,9 +15,11 @@ from src.config import (
     DEVICE,
     FASTTEXT_MODEL_PATH,
     MODEL_SAVE_PATH,
+    POS_TAGS,
+    POS_EMBEDDING_DIM,
 )
 from src.utils import load_fasttext_model
-from src.models.gru import GRUClassifier
+from src.models.gru import ImprovedGRUClassifier
 from src.pipeline.feature_pipeline import FeaturePipeline
 from src.models.predictor import SentencePredictor
 
@@ -64,8 +66,13 @@ async def lifespan(app: FastAPI):
     scaler = checkpoint.get("scaler", None)
     if scaler is None:
         logger.warning("No scaler found in checkpoint.")
+    threshold = checkpoint.get("threshold", 0.5)
 
-    gru_model = GRUClassifier(EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT).to(DEVICE)
+    gru_model = ImprovedGRUClassifier(
+        EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT,
+        num_extra_features=len(feature_columns), use_feature_fusion=True,
+        pos_vocab_size=len(POS_TAGS), pos_embedding_dim=POS_EMBEDDING_DIM,
+    ).to(DEVICE)
     gru_model.load_state_dict(checkpoint["model_state_dict"])
     gru_model.eval()
 
@@ -79,6 +86,7 @@ async def lifespan(app: FastAPI):
         scaler=scaler,
         feature_columns=feature_columns,
         model_type="gru",
+        threshold=threshold,
     )
     yield
 

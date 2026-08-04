@@ -34,10 +34,12 @@ class FeaturePipeline:
         df = self.structural_extractor.extract_features(df)
         return df
 
-    def create_temp_dataset(self, tokens):
+    def create_temp_dataset(self, tokens, pos_tags=None):
         from src.data.dataset import KhmerTextDataset
 
-        return KhmerTextDataset([tokens], [0], self.embedding_model, use_cache=True)
+        return KhmerTextDataset(
+            [tokens], pos_tags if pos_tags is not None else [[]], [0], self.embedding_model, use_cache=True
+        )
 
     @staticmethod
     def get_feature_cols():

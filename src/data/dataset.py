@@ -3,12 +3,23 @@ import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
+from src.config import POS_TAGS
+
+
+POS_TO_ID = {tag: i for i, tag in enumerate(POS_TAGS)}
+POS_UNKNOWN = POS_TO_ID["UNKNOWN"]
+
+
+def pos_tags_to_ids(pos_tags):
+    return [POS_TO_ID.get(tag, POS_UNKNOWN) for tag in pos_tags]
+
 
 class KhmerTextDataset(Dataset):
     _embedding_cache = {}
 
-    def __init__(self, tokens_list, labels, embedding_model, use_cache=True):
+    def __init__(self, tokens_list, pos_tags_list, labels, embedding_model, use_cache=True):
         self.tokens_list = tokens_list
+        self.pos_tags_list = pos_tags_list
         self.labels = labels
         self.embedding_model = embedding_model
         self.embedding_dim = embedding_model.get_dimension()
@@ -36,6 +47,7 @@ class KhmerTextDataset(Dataset):
 
     def __getitem__(self, idx):
         tokens = self.tokens_list[idx]
+        pos_tags = self.pos_tags_list[idx]
         label = self.labels[idx]
         embeddings = []
         for token in tokens:
@@ -47,10 +59,10 @@ class KhmerTextDataset(Dataset):
                 except Exception:
                     vec = np.zeros(self.embedding_dim)
             embeddings.append(vec)
-        embeddings = np.array(embeddings)
-        embeddings = torch.FloatTensor(embeddings)
+        embeddings = torch.FloatTensor(np.array(embeddings))
+        pos_ids = torch.LongTensor(pos_tags_to_ids(pos_tags))
         label = torch.LongTensor([label])
-        return embeddings, label, len(tokens)
+        return embeddings, pos_ids, label, len(tokens)
 
     @classmethod
     def clear_cache(cls):
@@ -59,8 +71,9 @@ class KhmerTextDataset(Dataset):
 
 
 def collate_batch(batch):
-    embeddings_list, labels_list, lengths_list = zip(*batch)
+    embeddings_list, pos_ids_list, labels_list, lengths_list = zip(*batch)
     padded_embeddings = pad_sequence(embeddings_list, batch_first=True)
+    padded_pos_ids = pad_sequence(pos_ids_list, batch_first=True, padding_value=POS_UNKNOWN)
     labels = torch.cat(labels_list)
     lengths = torch.LongTensor(lengths_list)
-    return padded_embeddings, labels, lengths
+    return padded_embeddings, padded_pos_ids, labels, lengths

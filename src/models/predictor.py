@@ -4,12 +4,13 @@ import numpy as np
 
 
 class SentencePredictor:
-    def __init__(self, feature_pipeline_instance, trained_model, scaler, feature_columns, model_type):
+    def __init__(self, feature_pipeline_instance, trained_model, scaler, feature_columns, model_type, threshold=0.5):
         self.feature_pipeline = feature_pipeline_instance
         self.model = trained_model
         self.scaler = scaler
         self.feature_columns = feature_columns
         self.model_type = model_type
+        self.threshold = threshold
         self._cache = {}
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if self.model_type == "gru":
@@ -49,20 +50,20 @@ class SentencePredictor:
             feature_vector = processed_df[self.feature_columns].iloc[0].values.reshape(1, -1)
             feature_vector_scaled = self.scaler.transform(feature_vector)
             extra_features = torch.FloatTensor(feature_vector_scaled).to(self.device)
-            temp_dataset = self.feature_pipeline.create_temp_dataset(tokens)
+            temp_dataset = self.feature_pipeline.create_temp_dataset(tokens, pos_tags)
             self.model.eval()
             with torch.no_grad():
-                embeddings, _, lengths = temp_dataset[0]
+                embeddings, pos_ids, _, lengths = temp_dataset[0]
                 embeddings = embeddings.unsqueeze(0).to(self.device)
+                pos_ids = pos_ids.unsqueeze(0).to(self.device)
                 lengths = torch.LongTensor([lengths]).to(self.device)
                 if hasattr(self.model, "use_feature_fusion") and self.model.use_feature_fusion:
-                    output, _ = self.model(embeddings, lengths, extra_features)
+                    output, _ = self.model(embeddings, lengths, extra_features, pos_ids)
                 else:
-                    output = self.model(embeddings, lengths)
+                    output = self.model(embeddings, lengths, pos_ids=pos_ids)
                 probs = torch.softmax(output, dim=1)
-                confidence, prediction_numeric = torch.max(probs, dim=1)
-                prediction_numeric = prediction_numeric.item()
-                confidence = confidence.item()
+                prediction_numeric = 1 if probs[0, 1].item() >= self.threshold else 0
+                confidence = probs[0, prediction_numeric].item()
         prediction_label = "Right" if prediction_numeric == 1 else "Wrong"
         return {
             "sentence": sentence,

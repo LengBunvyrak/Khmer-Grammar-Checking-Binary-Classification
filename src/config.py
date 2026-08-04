@@ -33,3 +33,14 @@ FEATURE_COLUMNS = [
 
 USE_FEATURE_FUSION = True
 NUM_EXTRA_FEATURES = len(FEATURE_COLUMNS)
+
+# Heavier weight on Wrong (0) reduces over-predicting "Right" (the known false-positive bias).
+CLASS_WEIGHTS = [1.3, 1.0]
+
+# Per-token POS embedding (sequence grammar signal), fed into the GRU alongside word vectors.
+POS_TAGS = [
+    "AB", "AUX", "CC", "CD", "DBL", "DT", "ETC", "IN", "JJ", "KAN",
+    "M", "NN", "PA", "PN", "PRO", "QT", "RB", "RPN", "SYM", "UH",
+    "VB", "VB_JJ", "VCOM", "UNKNOWN",
+]
+POS_EMBEDDING_DIM = 32

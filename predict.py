@@ -14,6 +14,8 @@ from src.config import (
     MODEL_SAVE_PATH,
     USE_FEATURE_FUSION,
     NUM_EXTRA_FEATURES,
+    POS_TAGS,
+    POS_EMBEDDING_DIM,
 )
 from src.models.gru import ImprovedGRUClassifier
 from src.pipeline.feature_pipeline import FeaturePipeline
@@ -42,10 +44,12 @@ def main():
     scaler = checkpoint.get("scaler", None)
     if scaler is None:
         print("Warning: No scaler found in checkpoint.")
+    threshold = checkpoint.get("threshold", 0.5)
 
     gru_model = ImprovedGRUClassifier(
         EMBEDDING_DIM, HIDDEN_DIM, OUTPUT_DIM, N_LAYERS, DROPOUT,
         num_extra_features=NUM_EXTRA_FEATURES, use_feature_fusion=USE_FEATURE_FUSION,
+        pos_vocab_size=len(POS_TAGS), pos_embedding_dim=POS_EMBEDDING_DIM,
     ).to(DEVICE)
     gru_model.load_state_dict(checkpoint["model_state_dict"])
     gru_model.eval()
@@ -60,6 +64,7 @@ def main():
         scaler=scaler,
         feature_columns=feature_columns,
         model_type="gru",
+        threshold=threshold,
     )
 
     print(f"\nPredicting for: {sentence}")

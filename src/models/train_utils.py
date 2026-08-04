@@ -1,6 +1,8 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from tqdm.auto import tqdm
+from sklearn.metrics import f1_score
 
 
 def train_gru_epoch(model, dataloader, optimizer, criterion, device, clip_value=1.0):
@@ -8,12 +10,15 @@ def train_gru_epoch(model, dataloader, optimizer, criterion, device, clip_value=
     epoch_loss = 0
     correct = 0
     total = 0
-    for embeddings, labels, lengths in tqdm(dataloader, desc="Training"):
+    for embeddings, pos_ids, labels, lengths in tqdm(dataloader, desc="Training"):
         embeddings = embeddings.to(device)
         labels = labels.to(device)
         lengths = lengths.to(device)
         optimizer.zero_grad()
-        predictions = model(embeddings, lengths)
+        if getattr(model, "use_pos", False):
+            predictions = model(embeddings, lengths, pos_ids=pos_ids)
+        else:
+            predictions = model(embeddings, lengths)
         loss = criterion(predictions, labels)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
@@ -33,11 +38,14 @@ def evaluate_gru(model, dataloader, criterion, device):
     all_preds = []
     all_labels = []
     with torch.no_grad():
-        for embeddings, labels, lengths in tqdm(dataloader, desc="Evaluating"):
+        for embeddings, pos_ids, labels, lengths in tqdm(dataloader, desc="Evaluating"):
             embeddings = embeddings.to(device)
             labels = labels.to(device)
             lengths = lengths.to(device)
-            predictions = model(embeddings, lengths)
+            if getattr(model, "use_pos", False):
+                predictions = model(embeddings, lengths, pos_ids=pos_ids)
+            else:
+                predictions = model(embeddings, lengths)
             loss = criterion(predictions, labels)
             _, predicted = torch.max(predictions, 1)
             correct += (predicted == labels).sum().item()
@@ -56,7 +64,7 @@ def train_gru_epoch_with_features(
     correct = 0
     total = 0
     batch_start_idx = 0
-    for embeddings, labels, lengths in tqdm(dataloader, desc="Training"):
+    for embeddings, pos_ids, labels, lengths in tqdm(dataloader, desc="Training"):
         batch_size = embeddings.size(0)
         embeddings = embeddings.to(device)
         labels = labels.to(device)
@@ -69,9 +77,9 @@ def train_gru_epoch_with_features(
             )
             batch_start_idx += batch_size
         if hasattr(model, "use_feature_fusion") and model.use_feature_fusion:
-            predictions, _ = model(embeddings, lengths, extra_features)
+            predictions, _ = model(embeddings, lengths, extra_features, pos_ids)
         else:
-            predictions = model(embeddings, lengths)
+            predictions = model(embeddings, lengths, pos_ids=pos_ids)
         loss = criterion(predictions, labels)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
@@ -92,7 +100,7 @@ def evaluate_gru_with_features(model, dataloader, feature_tensor, criterion, dev
     all_labels = []
     batch_start_idx = 0
     with torch.no_grad():
-        for embeddings, labels, lengths in tqdm(dataloader, desc="Evaluating"):
+        for embeddings, pos_ids, labels, lengths in tqdm(dataloader, desc="Evaluating"):
             batch_size = embeddings.size(0)
             embeddings = embeddings.to(device)
             labels = labels.to(device)
@@ -104,9 +112,9 @@ def evaluate_gru_with_features(model, dataloader, feature_tensor, criterion, dev
                 )
                 batch_start_idx += batch_size
             if hasattr(model, "use_feature_fusion") and model.use_feature_fusion:
-                predictions, _ = model(embeddings, lengths, extra_features)
+                predictions, _ = model(embeddings, lengths, extra_features, pos_ids)
             else:
-                predictions = model(embeddings, lengths)
+                predictions = model(embeddings, lengths, pos_ids=pos_ids)
             loss = criterion(predictions, labels)
             _, predicted = torch.max(predictions, 1)
             correct += (predicted == labels).sum().item()
@@ -115,6 +123,40 @@ def evaluate_gru_with_features(model, dataloader, feature_tensor, criterion, dev
             all_preds.extend(predicted.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
     return epoch_loss / len(dataloader), correct / total, all_preds, all_labels
+
+
+def predict_probs_with_features(model, dataloader, feature_tensor, device):
+    model.eval()
+    probs_list, labels_list = [], []
+    batch_start_idx = 0
+    with torch.no_grad():
+        for embeddings, pos_ids, labels, lengths in dataloader:
+            batch_size = embeddings.size(0)
+            embeddings = embeddings.to(device)
+            lengths = lengths.to(device)
+            extra_features = None
+            if feature_tensor is not None:
+                extra_features = feature_tensor[batch_start_idx : batch_start_idx + batch_size].to(
+                    device
+                )
+                batch_start_idx += batch_size
+            if hasattr(model, "use_feature_fusion") and model.use_feature_fusion:
+                predictions, _ = model(embeddings, lengths, extra_features, pos_ids)
+            else:
+                predictions = model(embeddings, lengths, pos_ids=pos_ids)
+            probs_list.append(torch.softmax(predictions, dim=1).cpu().numpy())
+            labels_list.append(labels.cpu().numpy())
+    return np.concatenate(probs_list), np.concatenate(labels_list)
+
+
+def find_best_threshold(probs, labels):
+    best_threshold, best_f1 = 0.5, -1.0
+    for t in np.arange(0.5, 1.0, 0.05):
+        pred = (probs[:, 1] >= t).astype(int)
+        f1 = f1_score(labels, pred)
+        if f1 > best_f1:
+            best_threshold, best_f1 = t, f1
+    return float(best_threshold)
 
 
 class EarlyStopping:
